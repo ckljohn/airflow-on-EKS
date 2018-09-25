@@ -1,0 +1,168 @@
+{{- $appName := .Chart.Name -}}
+{{- $image := printf "%s:%s" .Values.image.repository .Values.image.tag -}}
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: airflow
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: {{ $appName }}
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: airflow
+spec:
+  serviceName: airflow
+  podManagementPolicy: Parallel
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $appName }}
+  volumeClaimTemplates:
+  - metadata:
+      name: airflow-dags
+      annotations:
+        volume.beta.kubernetes.io/storage-class: efs
+    spec:
+      storageClassName: efs
+      accessModes:
+      - ReadWriteMany
+      resources:
+        requests:
+          storage: 1Gi
+  - metadata:
+      name: airflow-logs
+      annotations:
+        volume.beta.kubernetes.io/storage-class: efs
+    spec:
+      storageClassName: efs
+      accessModes:
+      - ReadWriteMany
+      resources:
+        requests:
+          storage: 20Gi
+  template:
+    metadata:
+      labels:
+        app: {{ $appName }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+      - name: "init"
+        image: {{ $image }}
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: airflow-configmap
+          mountPath: /usr/local/airflow/airflow.cfg
+          subPath: airflow.cfg
+        - name: airflow-dags
+          mountPath: /usr/local/airflow/dags
+        command:
+        - "bash"
+        - "-cx"
+        - "--"
+        args:
+        - "airflow initdb"
+        env:
+        - name: AIRFLOW__CORE__FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__CORE__FERNET_KEY
+              name: airflow-secrets
+        - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+              name: airflow-secrets
+      containers:
+      - name: webserver
+        image: {{ $image }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: webserver
+          containerPort: 8080
+        command:
+        - "bash"
+        - "-cex"
+        - "--"
+        args:
+        - "airflow webserver"
+        env:
+        - name: AIRFLOW__CORE__FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__CORE__FERNET_KEY
+              name: airflow-secrets
+        - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+              name: airflow-secrets
+        - name: AIRFLOW__SMTP__SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__SMTP__SMTP_PASSWORD
+              name: airflow-secrets
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__WEBSERVER__SECRET_KEY
+              name: airflow-secrets
+        dnsPolicy: ClusterFirst
+        volumeMounts:
+        - name: airflow-configmap
+          mountPath: /usr/local/airflow/airflow.cfg
+          subPath: airflow.cfg
+        - name: airflow-dags
+          mountPath: /usr/local/airflow/dags
+          readOnly: true
+        - name: airflow-logs
+          mountPath: /var/log/airflow
+      - name: scheduler
+        image: {{ $image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - "bash"
+        - "-cex"
+        - "--"
+        args:
+        - "airflow scheduler"
+        env:
+        - name: AIRFLOW__CORE__FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__CORE__FERNET_KEY
+              name: airflow-secrets
+        - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+              name: airflow-secrets
+        - name: AIRFLOW__SMTP__SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: AIRFLOW__SMTP__SMTP_PASSWORD
+              name: airflow-secrets
+        dnsPolicy: ClusterFirst
+        volumeMounts:
+        - name: airflow-configmap
+          mountPath: /usr/local/airflow/airflow.cfg
+          subPath: airflow.cfg
+        - name: airflow-dags
+          mountPath: /usr/local/airflow/dags
+          readOnly: true
+        - name: airflow-logs
+          mountPath: /var/log/airflow
+      volumes:
+      - name: airflow-configmap
+        configMap:
+          name: airflow-configmap

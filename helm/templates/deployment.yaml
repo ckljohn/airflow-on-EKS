@@ -1,0 +1,32 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: airflow-dags
+  labels:
+    keel.sh/policy: all
+    keel.sh/trigger: poll
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: airflow-dags
+    spec:
+      containers:
+      - name: airflow-dags
+        image: "{{ .Values.dags_image.repository }}:{{ .Values.dags_image.tag }}"
+        imagePullPolicy: Always
+        command:
+        - "sh"
+        - "-ce"
+        - "--"
+        args:
+        - "echo BUILD_NUMBER=$TRAVIS_BUILD_NUMBER && echo COMMIT_HASH=$TRAVIS_COMMIT_HASH && rsync -rvuc --delete --exclude='__pycache__' /dags/ /export && sleep 86400"
+        volumeMounts:
+        - name: airflow-dags
+          mountPath: /export
+      volumes:
+      - name: airflow-dags
+        persistentVolumeClaim:
+          claimName: airflow-dags-airflow-0

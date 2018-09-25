@@ -1,0 +1,18 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: airflow
+  annotations:
+    traefik.ingress.kubernetes.io/redirect-regex: ^http://{{ .Values.ingress.host }}/(.*)
+    traefik.ingress.kubernetes.io/redirect-replacement: https://{{ .Values.ingress.host }}/$1
+    ingress.kubernetes.io/auth-type: basic
+    ingress.kubernetes.io/auth-secret: ingress-auth
+spec:
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: airflow
+          servicePort: 8080
