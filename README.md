@@ -11,7 +11,7 @@ I am using ingress with traefik for simplicity. nginx for sure is more powerful.
 ## DAG deployment
 
 I have another docker image that store all my dags and plugins. When combine with CI and Keel, 
-dags can be auto deploy to airflow when there is a git commit.
+dags can be auto deployed to airflow after a git commit.
 
 ## Setup
 
