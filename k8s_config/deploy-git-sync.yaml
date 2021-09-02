@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-git-sync
+  namespace: airflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: airflow-git-sync
+  template:
+    metadata:
+      labels:
+        name: airflow-git-sync
+    spec:
+      containers:
+      - name: git-sync
+        image: airflow-dags-deployment
+        volumeMounts:
+        # - name: git-secret
+        #   mountPath: /etc/git-secret
+        #   readOnly: true
+        - name: airflow-dags
+          mountPath: /export
+        securityContext:
+          runAsUser: 65533 # git-sync user
+        env:
+        - name: GIT_SYNC_REPO
+          value: https://github.com/ckljohn/airflow-on-EKS.git
+        - name: GIT_SYNC_SSH
+          value: "false"
+        - name: GIT_SYNC_BRANCH
+          value: "master"
+        - name: GIT_SYNC_SUBMODULES
+          value: shallow
+        - name: GIT_SYNC_TIMEOUT
+          value: "300"
+        - name: GIT_SYNC_WAIT
+          value: "30"
+        - name: GIT_SYNC_HOOK_COMMAND
+          value: "post-sync"
+        - name: DAGS_PATH
+          value: "dags/"
+        - name: CP_TO_DIR
+          value: "/export"
+        - name: GIT_COMMIT_URL
+          value: https://github.com/ckljohn/airflow-on-EKS/commit/
+        - name: SLACK_NOTIFICATION
+          value: "true"
+        - name: SLACK_TOKEN
+          value: $SLACK_TOKEN
+        - name: SLACK_CHANNEL
+          value: $SLACK_CHANNEL
+        - name: SLACK_USERNAME
+          value: Git Sync
+        - name: SLACK_ICON
+          value: ":airflow:"
+        - name: SLACK_MESSAGE
+          value: Airflow DAGS deployed
+      volumes:
+      # - name: git-secret
+      #   secret:
+      #     secretName: git-creds
+      #     defaultMode: 0400
+      - name: airflow-dags
+        persistentVolumeClaim:
+          claimName: airflow-dags-airflow-0
+      securityContext:
+        fsGroup: 65533 # to make SSH key readable

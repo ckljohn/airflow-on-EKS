@@ -1,0 +1,417 @@
+---
+# https://airflow.apache.org/docs/helm-chart/stable/parameters-ref.html
+# https://github.com/apache/airflow/blob/main/chart/values.yaml
+
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: main
+  namespace: airflow
+  annotations:
+    fluxcd.io/ignore: "false"
+    fluxcd.io/automated: "false"
+spec:
+  helmVersion: v3
+  chart:
+    repository: https://airflow.apache.org
+    name: airflow
+    version: 1.1.0
+
+  values:
+    # Default values for airflow.
+    # This is a YAML-formatted file.
+    # Declare variables to be passed into your templates.
+
+    # User and group of airflow user
+    uid: 50000
+    gid: 0
+
+    # Airflow home directory
+    # Used for mount paths
+    airflowHome: "/usr/local/airflow"
+
+    # Default airflow repository -- overrides all the specific images below
+    defaultAirflowRepository: airflow-base
+
+    # Default airflow tag to deploy
+    defaultAirflowTag: latest
+
+    # Airflow version (Used to make some decisions based on Airflow Version being deployed)
+    airflowVersion: "2.1.2"
+
+    # Add common labels to all objects and pods defined in this chart.
+    labels:
+      app: airflow
+
+    # Ingress configuration
+    ingress:
+      # Enable ingress resource
+      enabled: false
+
+    # Network policy configuration
+    networkPolicies:
+      # Enabled network policies
+      enabled: false
+
+    # Extra annotations to apply to all
+    # Airflow pods
+    airflowPodAnnotations:
+      reloader.stakater.com/auto: "true"
+
+    # Enable RBAC (default on most clusters these days)
+    rbac:
+      # Specifies whether RBAC resources should be created
+      create: true
+
+    # Airflow executor
+    # Options: SequentialExecutor, LocalExecutor, CeleryExecutor, KubernetesExecutor
+    executor: "KubernetesExecutor"
+
+    # If this is true and using LocalExecutor/SequentialExecutor/KubernetesExecutor, the scheudler's
+    # service account will have access to communicate with the api-server and launch pods.
+    # If this is true and using the CeleryExecutor, the workers will be able to launch pods.
+    allowPodLaunching: true
+
+    # Images
+    images:
+      airflow:
+        repository: ~
+        tag: ~
+        pullPolicy: IfNotPresent
+      pod_template:
+        repository: ~
+        tag: ~
+        pullPolicy: IfNotPresent
+
+    # Secrets for all airflow containers
+    secret:
+    - secretName: airflow-secrets
+      envName: AIRFLOW__SMTP__SMTP_PASSWORD
+      secretKey: smtp-password
+
+    # Extra env 'items' that will be added to the definition of airflow containers
+    # a string is expected (can be templated).
+    extraEnv: |
+      - name: AWS_METADATA_SERVICE_TIMEOUT
+        value: "5"
+      - name: AWS_METADATA_SERVICE_NUM_ATTEMPTS
+        value: "5"
+    # Airflow database config
+    data:
+      # If secret names are provided, use those secrets
+      metadataSecretName: airflow-secrets
+
+    # Fernet key settings
+    fernetKeySecretName: airflow-secrets
+
+    # Flask secret key for Airflow Webserver: `[webserver] secret_key` in airflow.cfg
+    webserverSecretKeySecretName: airflow-secrets
+
+    kerberos:
+      enabled: false
+
+    # Airflow Worker Config
+    workers:
+      # Number of airflow celery workers in StatefulSet
+      replicas: 1
+
+      # Allow KEDA autoscaling.
+      # Persistence.enabled must be set to false to use KEDA.
+      keda:
+        enabled: false
+
+      persistence:
+        # Enable persistent volumes
+        enabled: false
+
+
+    # Airflow scheduler settings
+    scheduler:
+      # Scheduler pod disruption budget
+      podDisruptionBudget:
+        enabled: false
+
+        # PDB configuration
+        config:
+          maxUnavailable: 1
+
+      resources:
+        limits:
+          memory: 2Gi
+        requests:
+          cpu: 500m
+          memory: 1Gi
+
+      # This setting tells kubernetes that its ok to evict
+      # when it wants to scale a node down.
+      safeToEvict: true
+
+    # Airflow webserver settings
+    webserver:
+      allowPodLogReading: true
+      livenessProbe:
+        initialDelaySeconds: 15
+        timeoutSeconds: 30
+        failureThreshold: 20
+        periodSeconds: 5
+
+      readinessProbe:
+        initialDelaySeconds: 15
+        timeoutSeconds: 30
+        failureThreshold: 20
+        periodSeconds: 5
+
+      # Number of webservers
+      replicas: 1
+
+      resources:
+        limits:
+          memory: 2Gi
+        requests:
+          memory: 1Gi
+
+      # Create initial user.
+      defaultUser:
+        enabled: false
+
+      # Mount additional volumes into webserver.
+      extraVolumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: airflow-logs-airflow-0
+      extraVolumeMounts:
+      - name: logs
+        mountPath: "/usr/local/airflow/logs"
+
+      # This will be mounted into the Airflow Webserver as a custom
+      # webserver_config.py. You can bake a webserver_config.py in to your image
+      # instead
+      webserverConfig: ~
+      service:
+        type: ClusterIP
+        ## service annotations
+        annotations: {}
+
+    # Flower settings
+    flower:
+      enabled: false
+
+    # Statsd settings
+    statsd:
+      enabled: false
+
+    # Pgbouncer settings
+    pgbouncer:
+      # Enable pgbouncer
+      enabled: false
+      # Pgbouner pod disruption budget
+      podDisruptionBudget:
+        enabled: false
+      ssl: {}
+
+    redis:
+      enabled: false
+
+    # Auth secret for a private registry
+    # This is used if pulling airflow images from a private registry
+    registry:
+      secretName: ~
+
+    # Elasticsearch logging configuration
+    elasticsearch:
+      # Enable elasticsearch task logging
+      enabled: false
+
+    # All ports used by chart
+    ports:
+      airflowUI: 8080
+      workerLogs: 8793
+
+    # Define any ResourceQuotas for namespace
+    quotas: {}
+
+    # Define default/max/min values for pods and containers in namespace
+    limits:
+    - type: Container
+      defaultRequest:
+        cpu: "50m"
+        memory: "256Mi"
+
+    # This runs as a CronJob to cleanup old pods.
+    cleanup:
+      enabled: false
+      # Run every 15 minutes
+      schedule: "*/15 * * * *"
+
+    # Configuration for postgresql subchart
+    # Not recommended for production
+    postgresql:
+      enabled: false
+
+    # Config settings to go into the mounted airflow.cfg
+    #
+    # Please note that these values are passed through the `tpl` function, so are
+    # all subject to being rendered as go templates. If you need to include a
+    # litera `{{` in a value, it must be expessed like this:
+    #
+    #    a: '{{ "{{ not a template }}" }}'
+    #
+    # yamllint disable rule:line-length
+
+    # NOTE: check the file diff of airflow/config_templates/default_airflow.cfg
+    # at https://github.com/apache/airflow/compare/1.10.12...1.10.14 for every upgrade
+    config:
+      core:
+        sql_alchemy_pool_size: '0'
+        sql_alchemy_max_overflow: '-1'
+        dag_concurrency: '64'
+        load_examples: 'False'
+        load_default_connections: 'False'
+        plugins_folder: '/usr/local/airflow/dags/plugins'
+        store_dag_code: 'False'
+
+      # Authentication backend used for the experimental API
+      api:
+        auth_backend: airflow.api.auth.backend.deny_all
+      webserver:
+        reload_on_plugin_change: 'True'
+        navbar_color: '#388ebc'
+        expose_config: 'False'
+        workers: '1'
+        worker_class: 'gevent'
+      #    enable_proxy_fix: 'True'
+
+      smtp:
+        smtp_hots: 'smtp.sendgrid.net'
+        smtp_starttls: 'False'
+        smtp_ssl: 'True'
+        smtp_user: 'apikey'
+        smtp_port: '465'
+        smtp_mail_from: 'airflow@foo.bar'
+
+      scheduler:
+        job_heartbeat_sec: "5"
+        num_runs: '-1'
+        processor_poll_interval: '1'
+        min_file_process_interval: '0'
+        parsing_processes: '4'
+        catchup_by_default: 'False'
+
+        # Restart Scheduler every 41460 seconds (11 hours 31 minutes)
+        # The odd time is chosen so it is not always restarting on the same "hour" boundary
+        # run_duration: 41460
+        # run_duration: -1
+
+      logging:
+        logging_level: 'INFO'
+        remote_logging: 'True'
+        remote_log_conn_id: 'aws_default'
+        remote_base_log_folder: 's3://foo/airflow/log/'
+        colored_console_log: 'False'
+
+      kubernetes:
+        pod_template_file: '{{ include "airflow_pod_template_file" . }}/pod_template_file.yaml'
+        worker_pods_creation_batch_size: '5'
+        delete_worker_pods: 'True'
+        delete_worker_pods_on_failure: 'True'
+    # yamllint enable rule:line-length
+
+    # TODO remove pod template after https://github.com/apache/airflow/issues/11629 is fixed
+    podTemplate: |
+      ---
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: dummy-name
+        annotations:
+          iam.amazonaws.com/role: foo
+      spec:
+        containers:
+        - args: []
+          command: []
+          envFrom:
+            []
+          env:
+          - name: AIRFLOW__CORE__EXECUTOR
+            value: LocalExecutor
+          # Hard Coded Airflow Envs
+          - name: AIRFLOW__CORE__FERNET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: airflow-secrets
+                key: fernet-key
+          - name: AIRFLOW__WEBSERVER__SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: airflow-secrets
+                key: webserver-secret-key
+          - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+            valueFrom:
+              secretKeyRef:
+                name: airflow-secrets
+                key: connection
+          - name: AIRFLOW_CONN_AIRFLOW_DB
+            valueFrom:
+              secretKeyRef:
+                name: airflow-secrets
+                key: connection
+          # Dynamically created environment variables
+          # Dynamically created secret envs
+          - name: AIRFLOW__SMTP__SMTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: airflow-secrets
+                key: smtp-passowrd
+
+          # Extra env
+          - name: AWS_METADATA_SERVICE_TIMEOUT
+            value: "5"
+          - name: AWS_METADATA_SERVICE_NUM_ATTEMPTS
+            value: "5"
+          image: airflow-base:latest
+          imagePullPolicy: IfNotPresent
+          name: base
+          ports: []
+          volumeMounts:
+          - mountPath: "/usr/local/airflow/logs"
+            name: airflow-logs
+          - name: config
+            mountPath: "/usr/local/airflow/airflow.cfg"
+            subPath: airflow.cfg
+            readOnly: true
+          - mountPath: /usr/local/airflow/dags
+            name: dags
+            readOnly: true
+            subPath: ./
+        hostNetwork: false
+        restartPolicy: Never
+        securityContext:
+          runAsUser: 50000
+        nodeSelector:
+          {}
+        affinity:
+          {}
+        tolerations:
+          []
+        volumes:
+        - name: dags
+          persistentVolumeClaim:
+            claimName: airflow-dags-airflow-0
+        - name: airflow-logs
+          persistentVolumeClaim:
+            claimName: airflow-logs-airflow-0
+        - configMap:
+            name: airflow-main-airflow-config
+          name: config
+    # Git sync
+    dags:
+      persistence:
+        # Enable persistent volume for storing dags
+        enabled: true
+        # access mode of the persistent volume
+        accessMode: ReadWriteMany
+        ## the name of an existing PVC to use
+        existingClaim: airflow-dags-airflow-0
+      gitSync:
+        enabled: false
+        subPath: ""

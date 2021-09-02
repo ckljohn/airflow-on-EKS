@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  git-sync:
+    image: airflow-dags-deployment
+    build:
+      context: .
+      args:
+        git_sync_version: v3.3.4
+        export_dir: /export
+    environment:
+      GIT_SYNC_REPO: https://github.com/ckljohn/airflow-on-EKS.git
+      GIT_SYNC_SSH: "false"
+      GIT_SYNC_BRANCH: master
+      GIT_SYNC_SUBMODULES: shallow
+      GIT_SYNC_TIMEOUT: "300"
+      GIT_SYNC_WAIT: "30"
+      GIT_SYNC_HOOK_COMMAND: post-sync
+      DAGS_PATH: dags/
+      CP_TO_DIR: /export
+      GIT_COMMIT_URL: https://github.com/ckljohn/airflow-on-EKS/commit/
+      SLACK_NOTIFICATION: "true"
+      SLACK_TOKEN: $SLACK_TOKEN
+      SLACK_CHANNEL: $SLACK_CHANNEL
+      SLACK_USERNAME: Git Sync
+      SLACK_ICON: ":airflow:"
+      SLACK_MESSAGE: Airflow DAGS deployed

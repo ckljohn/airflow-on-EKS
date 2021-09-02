@@ -1,0 +1,102 @@
+# https://github.com/apache/airflow/blob/main/docs/apache-airflow/start/docker-compose.yaml
+
+# Basic Airflow cluster configuration
+#
+# WARNING: This configuration is for local development. Do not use it in a production deployment.
+#
+# This configuration supports basic configuration using environment variables or an .env file
+# The following variables are supported:
+#
+# AIRFLOW_IMAGE_NAME         - Docker image name used to run Airflow.
+#                              Default: apache/airflow:master-python3.8
+# AIRFLOW_UID                - User ID in Airflow containers
+#                              Default: 50000
+# AIRFLOW_GID                - Group ID in Airflow containers
+#                              Default: 50000
+# _AIRFLOW_WWW_USER_USERNAME - Username for the administrator account.
+#                              Default: airflow
+# _AIRFLOW_WWW_USER_PASSWORD - Password for the administrator account.
+#                              Default: airflow
+---
+version: "3.8"
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: airflow-base:${TAG:-latest}
+  env_file: .env
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
+  depends_on:
+    airflow_db:
+      condition: service_healthy
+
+services:
+  airflow_db:
+    container_name: airflow_db
+    image: postgres:11.12
+    environment:
+    - POSTGRES_USER=airflow
+    - POSTGRES_PASSWORD=airflow
+    - POSTGRES_DB=airflow
+    ports:
+      - 5432:5432
+    volumes:
+    - airflow_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+  airflow_webserver:
+    container_name: airflow_webserver
+    <<: *airflow-common
+    command: webserver
+    ports:
+    - 8080:8080
+    volumes:
+      - ${AIRFLOW_DAGS_REPO}/dags:/usr/local/airflow/dags
+      # - /tmp/airflow/logs:/usr/local/airflow/logs
+      # - ./files/webserver_config.py:/usr/local/airflow/webserver_config.py
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  airflow_scheduler:
+    container_name: airflow_scheduler
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+    volumes:
+      - ${AIRFLOW_DAGS_REPO}/dags:/usr/local/airflow/dags
+      # - /tmp/airflow/logs:/usr/local/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.ssh:/usr/local/airflow/.ssh
+      - ~/.aws/:/root/.aws/
+      - ~/.kube/:/usr/local/airflow/.kube/
+      # For EKS authentication
+      - ~/.aws/credentials:/usr/local/airflow/.aws/credentials
+
+  airflow_init:
+    container_name: airflow_init
+    <<: *airflow-common
+    command: version
+    environment:
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+
+volumes:
+  airflow_db:
+    external:
+      name: airflow_db
