@@ -1,0 +1,37 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: efs
+    volume.beta.kubernetes.io/storage-provisioner: default/aws-efs
+  labels:
+    app: airflow
+  name: airflow-dags-airflow-0
+  namespace: airflow
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: efs
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: efs
+    volume.beta.kubernetes.io/storage-provisioner: default/aws-efs
+  labels:
+    app: airflow
+  name: airflow-logs-airflow-0
+  namespace: airflow
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: efs

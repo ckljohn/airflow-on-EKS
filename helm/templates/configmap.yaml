@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: airflow-configmap
-data:
-  airflow.cfg: |
-{{ .Files.Get "files/airflow.cfg" | indent 4 }}
